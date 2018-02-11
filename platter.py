@@ -10,6 +10,7 @@ import tarfile
 import zipfile
 import hashlib
 import tempfile
+import re
 import sysconfig
 import subprocess
 from contextlib import contextmanager
@@ -85,14 +86,15 @@ echo 'Setting up virtualenv'
 "$py" "$DATA_DIR/virtualenv.py" "$1"
 VIRTUAL_ENV="$(cd "$1"; pwd)"
 
-INSTALL_ARGS=''
 if [ -f "$DATA_DIR/requirements.txt" ]; then
-  INSTALL_ARGS="$INSTALL_ARGS"\ -r\ "$DATA_DIR/requirements.txt"
+  "$VIRTUAL_ENV/bin/pip" install --pre --no-index \
+  --find-links "$DATA_DIR" -r "$DATA_DIR/requirements.txt" | grep -v '^$'
 fi
 
 echo "Installing %(name)s"
 "$VIRTUAL_ENV/bin/pip" install --pre --no-index \
-  --find-links "$DATA_DIR" wheel $INSTALL_ARGS %(pkg)s | grep -v '^$'
+  --find-links "$DATA_DIR" wheel $INSTALL_ARGS %(pkg_install_args)s  \
+  %(pkg)s | grep -v '^$'
 
 # Potential post installation
 cd "$HERE"
@@ -211,7 +213,7 @@ class Builder(object):
     def __init__(self, log, path, output, python=None,
                  virtualenv_version=None, wheel_version=None,
                  pip_options=None, no_download=None, wheel_cache=None,
-                 requirements=None):
+                 requirements=None, require_hashes=None):
         self.log = log
         self.path = os.path.abspath(path)
         self.output = output
@@ -226,6 +228,7 @@ class Builder(object):
         if requirements is not None:
             requirements = os.path.abspath(requirements)
         self.requirements = requirements
+        self.require_hashes = require_hashes
         self.no_download = no_download
         self.pip_options = list(pip_options or ())
         self.scratchpads = []
@@ -324,15 +327,34 @@ class Builder(object):
 
             cmdline = ['wheel', '--wheel-dir=' + data_dir]
             cmdline.extend(self.get_pip_options())
+            if self.require_hashes:
+                cmdline.append('--no-deps')
+
+            self.execute(os.path.join(venv_path, 'bin', 'pip'),
+                         cmdline + [self.path])
 
             if self.requirements is not None:
-                cmdline.extend(('-r', self.requirements))
-                shutil.copy2(self.requirements,
-                             os.path.join(data_dir, 'requirements.txt'))
+                # execute requirements separately in case hashes are specified
+                # pip will fail to install local directories when hashes are
+                # required
+                if self.require_hashes:
+                    cmdline.append('--require-hashes')
+                data_reqs_path = os.path.join(data_dir, 'requirements.txt')
+                shutil.copy2(self.requirements, data_reqs_path)
+                self.execute(os.path.join(venv_path, 'bin', 'pip'),
+                             cmdline + ['-r', self.requirements])
+                # strip hashes for install bundle. they were already checked
+                # required because freshly compiled wheels will not hash match
+                if self.require_hashes:
+                    hash_match = re.compile(r'\s*--hash\s*=\s*[\w:]+')
+                    with open(data_reqs_path, 'r+') as reqs_file:
+                        no_hash_reqs = hash_match.sub('', reqs_file.read())
+                        reqs_file.seek(0)
+                        reqs_file.write(no_hash_reqs)
+                        reqs_file.truncate()
 
-            cmdline.append(self.path)
 
-            self.execute(os.path.join(venv_path, 'bin', 'pip'), cmdline)
+
 
     def setup_build_venv(self, virtualenv):
         scratchpad = self.make_scratchpad('venv')
@@ -353,12 +375,16 @@ class Builder(object):
             postinstall = f.read().rstrip().decode('utf-8')
 
         with open(fn, 'w') as f:
-            f.write((INSTALLER % dict(
+            installer_vars = dict(
                 name=pkginfo['ident'],
                 pkg=pkginfo['name'],
                 python=os.path.basename(self.python),
                 postinstall=postinstall,
-            )).encode('utf-8'))
+                pkg_install_args='',
+            )
+            if self.require_hashes:
+                installer_vars['pkg_install_args'] = '--no-deps'
+            f.write((INSTALLER % installer_vars).encode('utf-8'))
         os.chmod(fn, 0100755)
 
     def put_meta_info(self, scratchpad, pkginfo):
@@ -640,9 +666,15 @@ def cli():
               'additional packages that should be installed in addition to '
               'the main one.  This can be useful when you need to pull in '
               'optional dependencies.')
+@click.option('--require-hashes', is_flag=True,
+              help='Require hash checking on all dependencies. This will '
+              'install the project with --no-deps and assume all '
+              'dependencies are provided by the requirements file with '
+              'hashes.')
 def build_cmd(path, output, python, virtualenv_version, wheel_version,
               format, pip_option, prebuild_script, postbuild_script,
-              wheel_cache, no_wheel_cache, no_download, requirements):
+              wheel_cache, no_wheel_cache, no_download, requirements,
+              require_hashes):
     """Builds a platter package.  The argument is the path to the package.
     If not given it discovers the closest setup.py.
 
@@ -673,7 +705,8 @@ def build_cmd(path, output, python, virtualenv_version, wheel_version,
                  pip_options=list(pip_option),
                  no_download=no_download,
                  wheel_cache=wheel_cache,
-                 requirements=requirements) as builder:
+                 requirements=requirements,
+                 require_hashes=require_hashes) as builder:
         builder.build(format, prebuild_script=prebuild_script,
                       postbuild_script=postbuild_script)
 
