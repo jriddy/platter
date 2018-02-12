@@ -23,7 +23,7 @@ INSTALLER = '''\
 # This script installs the bundled wheel distribution of %(name)s into
 # a provided path where it will end up in a new virtualenv.
 
-set -e
+set -e -o pipefail
 
 show_usage() {
 echo "Usage: ./install.sh [OPTIONS] DST"
