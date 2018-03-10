@@ -208,6 +208,17 @@ def get_default_wheel_cache():
     return get_cache_dir('platter')
 
 
+def requirements_from_pipfile_lock(pipfile_lock):
+    from pipenv.utils import convert_deps_to_pip
+    with open(pipfile_lock) as f:
+        deps = json.load(f)['default']
+    # remove local project it will be handled later
+    for k, v in list(deps.items()):
+        if v.get('path') == '.':
+            del(deps[k])
+    return convert_deps_to_pip(deps)
+
+
 class Builder(object):
 
     def __init__(self, log, path, output, python=None,
@@ -699,6 +710,17 @@ def build_cmd(path, output, python, virtualenv_version, wheel_version,
     if wheel_cache is not None:
         log.info('Using wheel cache in {}', wheel_cache)
 
+    pipfile_requirements = None
+    pipfile_lock = os.path.join(path, 'Pipfile.lock')
+    if os.path.exists(pipfile_lock):
+        log.info("Pipfile.lock detected. Adding it to requirements.")
+        require_hashes = True
+        pipfile_requirements = requirements_from_pipfile_lock(pipfile_lock)
+        if requirements:
+            with open(pipfile_requirements, 'a'):
+                pipfile_requirements.write(requirements.read())
+        requirements = pipfile_requirements
+
     with Builder(log, path, output, python=python,
                  virtualenv_version=virtualenv_version,
                  wheel_version=wheel_version,
@@ -710,6 +732,8 @@ def build_cmd(path, output, python, virtualenv_version, wheel_version,
         builder.build(format, prebuild_script=prebuild_script,
                       postbuild_script=postbuild_script)
 
+    if pipfile_requirements:
+        os.remove(pipfile_requirements)
 
 @cli.command('clean-cache')
 def clean_cache_cmd():

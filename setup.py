@@ -15,6 +15,11 @@ setup(
     install_requires=[
         'click>=2.0',
     ],
+    extras_require={
+        'pipenv': [
+            'pipenv',
+        ],
+    },
     entry_points='''
         [console_scripts]
         platter=platter:cli
