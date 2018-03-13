@@ -13,6 +13,7 @@ import tempfile
 import re
 import sysconfig
 import subprocess
+import pytoml as toml
 from contextlib import contextmanager
 
 
@@ -492,6 +493,10 @@ class Builder(object):
     def run_build_script(self, scratchpad, venv_path,
                          build_script, install_script_path):
         self.log.info('Invoking build script {}', build_script)
+        if build_script.splitlines() > 1:
+            script = build_script
+        else:
+            script = os.path.abspath(build_script)
         with self.log.indented():
             script = '''
             . "%(venv)s/bin/activate"
@@ -502,10 +507,10 @@ class Builder(object):
             %(script)s
             ''' % {
                 'venv': venv_path,
-                'script': os.path.abspath(build_script),
+                'script': script,
                 'path': self.path,
                 'here': scratchpad,
-                'scratchpad': self.make_scratchpad('postbuild'),
+                'scratchpad': self.make_scratchpad('build'),
             }
             env = dict(os.environ)
             env['INSTALL_SCRIPT'] = install_script_path
@@ -630,6 +635,33 @@ def cli():
     """
 
 
+def get_opts_from_pyproject(path):
+    """
+    Reads options from [tool.platter] section in pyproject.toml if it exists.
+    CLI options and environment variables take precedence.
+    """
+    ctx = click.get_current_context()
+    fn = os.path.join(path, "pyproject.toml")
+    if not os.path.exists(fn):
+        return {}
+    with open(fn, 'r') as conffile:
+        config = toml.load(conffile)
+    try:
+        config_opts = config['tool']['platter']
+    except KeyError:
+        return {}
+    sanitized_opts = {}
+    for param in ctx.command.params:
+        python_param_name = param.name
+        cli_param_name = param.name.replace('_', '-')
+        param_in_toml = cli_param_name in config_opts
+        param_not_yet_defined = ctx.params[python_param_name] == param.default
+        if param_in_toml and param_not_yet_defined:
+            sanitized_opts[python_param_name] = param.process_value(
+                ctx, config_opts[cli_param_name])
+    return sanitized_opts
+
+
 @cli.command('build')
 @click.argument('path', required=False, type=click.Path())
 @click.option('--output', type=click.Path(), default='dist',
@@ -682,10 +714,7 @@ def cli():
               'install the project with --no-deps and assume all '
               'dependencies are provided by the requirements file with '
               'hashes.')
-def build_cmd(path, output, python, virtualenv_version, wheel_version,
-              format, pip_option, prebuild_script, postbuild_script,
-              wheel_cache, no_wheel_cache, no_download, requirements,
-              require_hashes):
+def build_cmd(**kwargs):
     """Builds a platter package.  The argument is the path to the package.
     If not given it discovers the closest setup.py.
 
@@ -696,41 +725,45 @@ def build_cmd(path, output, python, virtualenv_version, wheel_version,
     more files in the archive and also provide more install steps.
     """
     log = Log()
-    if path is None:
-        path = find_closest_package()
-    log.info('Using package from {}', path)
+    if kwargs['path'] is None:
+        kwargs['path'] = find_closest_package()
+    log.info('Using package from {}', kwargs['path'])
 
-    if no_wheel_cache:
-        if no_download:
+    opts_from_pyproject = get_opts_from_pyproject(kwargs['path'])
+    if opts_from_pyproject:
+        log.info("Loading config from pyproject.toml")
+        kwargs.update(opts_from_pyproject)
+
+    if kwargs['no_wheel_cache']:
+        if kwargs['no_download']:
             raise click.UsageError('--no-download and --no-cache cannot '
                                    'be used together.')
-        wheel_cache = None
-    elif wheel_cache is None:
-        wheel_cache = get_default_wheel_cache()
-    if wheel_cache is not None:
-        log.info('Using wheel cache in {}', wheel_cache)
+        kwargs['wheel_cache'] = None
+    elif kwargs['wheel_cache'] is None:
+        kwargs['wheel_cache'] = get_default_wheel_cache()
+    if kwargs['wheel_cache'] is not None:
+        log.info('Using wheel cache in {}', kwargs['wheel_cache'])
 
     pipfile_requirements = None
-    pipfile_lock = os.path.join(path, 'Pipfile.lock')
+    pipfile_lock = os.path.join(kwargs['path'], 'Pipfile.lock')
     if os.path.exists(pipfile_lock):
         log.info("Pipfile.lock detected. Adding it to requirements.")
-        require_hashes = True
+        kwargs['require_hashes'] = True
         pipfile_requirements = requirements_from_pipfile_lock(pipfile_lock)
-        if requirements:
+        if kwargs['requirements']:
             with open(pipfile_requirements, 'a'):
-                pipfile_requirements.write(requirements.read())
-        requirements = pipfile_requirements
+                pipfile_requirements.write(kwargs['requirements'].read())
+        kwargs['requirements'] = pipfile_requirements
 
-    with Builder(log, path, output, python=python,
-                 virtualenv_version=virtualenv_version,
-                 wheel_version=wheel_version,
-                 pip_options=list(pip_option),
-                 no_download=no_download,
-                 wheel_cache=wheel_cache,
-                 requirements=requirements,
-                 require_hashes=require_hashes) as builder:
-        builder.build(format, prebuild_script=prebuild_script,
-                      postbuild_script=postbuild_script)
+    with Builder(log, kwargs['path'], kwargs['output'],
+                 pip_options=list(kwargs['pip_option']),
+                 **{k: kwargs[k] for k in
+                    ['python', 'virtualenv_version', 'wheel_version',
+                     'no_download', 'wheel_cache', 'requirements',
+                     'require_hashes']}) as builder:
+        builder.build(kwargs['format'],
+                      prebuild_script=kwargs['prebuild_script'],
+                      postbuild_script=kwargs['postbuild_script'])
 
     if pipfile_requirements:
         os.remove(pipfile_requirements)

@@ -14,6 +14,7 @@ setup(
     platforms='any',
     install_requires=[
         'click>=2.0',
+        'pytoml==0.1.14',
     ],
     extras_require={
         'pipenv': [
