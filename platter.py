@@ -751,8 +751,9 @@ def build_cmd(**kwargs):
         kwargs['require_hashes'] = True
         pipfile_requirements = requirements_from_pipfile_lock(pipfile_lock)
         if kwargs['requirements']:
-            with open(pipfile_requirements, 'a'):
-                pipfile_requirements.write(kwargs['requirements'].read())
+            with open(pipfile_requirements, 'a') as pr:
+                with open(kwargs['requirements']) as r:
+                    pr.write('\n' + r.read())
         kwargs['requirements'] = pipfile_requirements
 
     with Builder(log, kwargs['path'], kwargs['output'],
