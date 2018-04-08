@@ -1,3 +1,4 @@
+from __future__ import unicode_literals
 import os
 import sys
 import json
@@ -129,7 +130,7 @@ class Log(object):
                          *args, **kwargs)
 
     def process_stream_output(self, process):
-        fds = set([process.stdout, process.stderr])
+        fds = {process.stdout, process.stderr}
         while fds:
             for f in select.select(fds, [], [])[0]:
                 try:
@@ -142,7 +143,7 @@ class Log(object):
                         raise
                 else:
                     color = f == process.stdout and 'cyan' or 'yellow'
-                    self.echo(click.style(line.rstrip(), fg=color))
+                    self.echo(click.style(line.decode('utf-8').rstrip(), fg=color))
 
     @contextmanager
     def indented(self):
@@ -300,7 +301,7 @@ class Builder(object):
 
         rv = self.execute(python, [
             'setup.py', '--name', '--version', '--fullname'],
-            capture=True).strip().splitlines()
+            capture=True).decode('utf-8').strip().splitlines()
         platform = sysconfig.get_platform()
         return {
             'name': rv[0],
@@ -384,7 +385,7 @@ class Builder(object):
         fn = os.path.join(scratchpad, 'install.sh')
 
         with open(install_script_path) as f:
-            postinstall = f.read().rstrip().decode('utf-8')
+            postinstall = f.read().rstrip()
 
         with open(fn, 'w') as f:
             installer_vars = dict(
@@ -396,8 +397,8 @@ class Builder(object):
             )
             if self.require_hashes:
                 installer_vars['pkg_install_args'] = '--no-deps'
-            f.write((INSTALLER % installer_vars).encode('utf-8'))
-        os.chmod(fn, 0100755)
+            f.write((INSTALLER % installer_vars))
+        os.chmod(fn, 0o100755)
 
     def put_meta_info(self, scratchpad, pkginfo):
         self.log.info('Placing meta information')
@@ -405,11 +406,11 @@ class Builder(object):
             json.dump(pkginfo, f, indent=2)
             f.write('\n')
         with open(os.path.join(scratchpad, 'VERSION'), 'w') as f:
-            f.write(pkginfo['version'].encode('utf-8') + '\n')
+            f.write(pkginfo['version'] + '\n')
         with open(os.path.join(scratchpad, 'PLATFORM'), 'w') as f:
-            f.write(pkginfo['platform'].encode('utf-8') + '\n')
+            f.write(pkginfo['platform'] + '\n')
         with open(os.path.join(scratchpad, 'PACKAGE'), 'w') as f:
-            f.write(pkginfo['name'].encode('utf-8') + '\n')
+            f.write(pkginfo['name'] + '\n')
 
     def create_archive(self, scratchpad, pkginfo, format):
         base = pkginfo['ident'] + '-' + pkginfo['platform']
@@ -493,7 +494,7 @@ class Builder(object):
     def run_build_script(self, scratchpad, venv_path,
                          build_script, install_script_path):
         self.log.info('Invoking build script {}', build_script)
-        if build_script.splitlines() > 1:
+        if len(build_script.splitlines()) > 1:
             script = build_script
         else:
             script = os.path.abspath(build_script)
@@ -518,7 +519,7 @@ class Builder(object):
                                  stdout=subprocess.PIPE,
                                  stderr=subprocess.PIPE,
                                  cwd=scratchpad)
-            c.stdin.write(script)
+            c.stdin.write(script.encode('utf-8'))
             c.stdin.flush()
             c.stdin.close()
             self.log.process_stream_output(c)
