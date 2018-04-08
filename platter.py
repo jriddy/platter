@@ -636,12 +636,11 @@ def cli():
     """
 
 
-def get_opts_from_pyproject(path):
+def get_opts_from_pyproject(ctx, path):
     """
     Reads options from [tool.platter] section in pyproject.toml if it exists.
     CLI options and environment variables take precedence.
     """
-    ctx = click.get_current_context()
     fn = os.path.join(path, "pyproject.toml")
     if not os.path.exists(fn):
         return {}
@@ -715,7 +714,8 @@ def get_opts_from_pyproject(path):
               'install the project with --no-deps and assume all '
               'dependencies are provided by the requirements file with '
               'hashes.')
-def build_cmd(**kwargs):
+@click.pass_context
+def build_cmd(ctx, **kwargs):
     """Builds a platter package.  The argument is the path to the package.
     If not given it discovers the closest setup.py.
 
@@ -730,7 +730,7 @@ def build_cmd(**kwargs):
         kwargs['path'] = find_closest_package()
     log.info('Using package from {}', kwargs['path'])
 
-    opts_from_pyproject = get_opts_from_pyproject(kwargs['path'])
+    opts_from_pyproject = get_opts_from_pyproject(ctx, kwargs['path'])
     if opts_from_pyproject:
         log.info("Loading config from pyproject.toml")
         kwargs.update(opts_from_pyproject)
@@ -771,7 +771,11 @@ def build_cmd(**kwargs):
         os.remove(pipfile_requirements)
 
 @cli.command('clean-cache')
-def clean_cache_cmd():
+@click.option('--wheel-cache', type=click.Path(),
+              help='An optional folder where platter should cache wheels '
+              'instead of the system default.  If you do not want to use '
+              'a wheel cache you can pass the --no-wheel-cache flag.')
+def clean_cache_cmd(**kwargs):
     """This command cleans the wheel cache.
 
     This is useful when the cache got polluted with bad wheels due to a
@@ -779,7 +783,7 @@ def clean_cache_cmd():
     wheel cache, it does not clean the download cache of pip.
     """
     log = Log()
-    wheel_cache = get_default_wheel_cache()
+    wheel_cache = kwargs['wheel_cache'] or get_default_wheel_cache()
     log.info('Cleaning cache in {}', wheel_cache)
     with log.indented():
         if os.path.isdir(wheel_cache):

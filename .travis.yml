@@ -4,7 +4,7 @@ python:
   - "3.5"
   - "3.6"
 install:
-  - pip install -e .[tests]
+  - pip install -e .[tests,pipenv]
   - pip install codecov
 script:
   - pytest --cov=platter --cov-report=term

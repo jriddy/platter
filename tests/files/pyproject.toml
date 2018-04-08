@@ -1,0 +1,6 @@
+[tool.platter]
+python = "python3.7"
+postbuild-script = """
+echo "1"
+echo "2"
+"""

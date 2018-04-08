@@ -23,6 +23,7 @@ setup(
         'tests': [
             'pytest',
             'pytest-cov',
+            'mock ; python_version<"3.3"',
         ]
     },
     entry_points='''
