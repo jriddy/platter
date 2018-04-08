@@ -1,0 +1,10 @@
+language: python
+python:
+  - "2.7"
+install:
+  - pip install -e .[tests]
+  - pip install codecov
+script:
+  - pytest --cov=platter --cov-report=term
+after_success:
+  - codecov
