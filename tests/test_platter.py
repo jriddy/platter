@@ -61,10 +61,7 @@ def test_end_to_end(tmpdir):
 
 
 def test_pipenv(tmpdir):
-    try:
-        import pipenv
-    except ImportError:
-        return pytest.skip("requires pipenv")
+    pytest.importorskip('pipenv')
     runner = CliRunner()
     result = runner.invoke(
         platter.build_cmd,
