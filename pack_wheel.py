@@ -11,7 +11,7 @@ from __future__ import print_function, unicode_literals
 
 import argparse
 import compileall
-import ntpath
+import stat
 import os
 import shutil
 import sys
@@ -43,11 +43,11 @@ def _retag_package(basename):
     return '-'.join([name, ver] + tags_parts) + '.whl'
 
 
-def pack(whl_fname, dst_dir):
+def pack(whl_fname, dst_dir, ensure_executable_scripts=True):
     """
     Un-pack original whl, compile all to pyc, then make a new whl
     """
-    whl_tmp_dir = whl_bname = ntpath.basename(whl_fname).rsplit('.', 1)[0]
+    whl_tmp_dir = whl_bname = os.path.basename(whl_fname).rsplit('.', 1)[0]
 
     print('creating {!r} ...'.format(whl_tmp_dir))
     os.mkdir(whl_tmp_dir)
@@ -58,6 +58,12 @@ def pack(whl_fname, dst_dir):
         whl_zipfile.extractall(whl_tmp_dir)
 
         for root, dirs, files in os.walk(whl_tmp_dir):
+            if ensure_executable_scripts and root.endswith('scripts'):
+                for f in files:
+                    path = os.path.join(root, f)
+                    st = os.stat(path)
+                    os.chmod(path, st.st_mode | stat.S_IEXEC)
+                continue
             for dir_name in dirs:
                 if dir_name == '__pycache__':
                     path = os.path.join(root, dir_name)
@@ -75,6 +81,8 @@ def pack(whl_fname, dst_dir):
             compileall.compile_dir(whl_tmp_dir, legacy=True)
 
         for root, dirs, files in os.walk(whl_tmp_dir):
+            if ensure_executable_scripts and root.endswith('scripts'):
+                continue
             for file_name in files:
                 if os.path.splitext(file_name)[1].lower() == '.py':
                     path = os.path.join(root, file_name)
