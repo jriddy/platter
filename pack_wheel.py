@@ -69,16 +69,11 @@ def pack(whl_fname, dst_dir, ensure_executable_scripts=True):
                     path = os.path.join(root, dir_name)
                     print('deleting {!r} ...'.format(path))
                     shutil.rmtree(path)
-            for file_name in files:
-                if os.path.splitext(file_name)[1].lower() in ('.pyc', '.pyo'):
-                    path = os.path.join(root, file_name)
-                    print('deleting {!r} ...'.format(path))
-                    os.remove(path)
 
         if _IS_PY2:
-            compileall.compile_dir(whl_tmp_dir)
+            compileall.compile_dir(whl_tmp_dir, force=True)
         else:
-            compileall.compile_dir(whl_tmp_dir, legacy=True)
+            compileall.compile_dir(whl_tmp_dir, legacy=True, force=True)
 
         for root, dirs, files in os.walk(whl_tmp_dir):
             if ensure_executable_scripts and root.endswith('scripts'):

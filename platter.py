@@ -348,9 +348,6 @@ class Builder(object):
             self.execute(os.path.join(venv_path, 'bin', 'pip'),
                          cmdline + [self.path])
 
-            if self.remove_sources:
-                self.pack_wheels(data_dir)
-
             if self.requirements is not None:
                 # execute requirements separately in case hashes are specified
                 # pip will fail to install local directories when hashes are
@@ -374,8 +371,8 @@ class Builder(object):
     def pack_wheels(self, data_dir):
         globs = self.remove_sources.split(',')
         wheels = []
-        for files in glob.glob(os.path.join(data_dir, globs)):
-            wheels.extend(files)
+        for g in globs:
+            wheels.extend(glob.glob(os.path.join(data_dir, g)))
         if wheels:
             self.log.info("packing wheels: {}", wheels)
             pack_wheel.pack_all(wheels, data_dir)
@@ -618,6 +615,9 @@ class Builder(object):
 
         if self.wheel_cache:
             self.update_wheel_cache(data_dir, venv_artifact)
+
+        if self.remove_sources:
+            self.pack_wheels(data_dir)
 
         self.put_installer(scratchpad, pkginfo,
                            install_script_path)
