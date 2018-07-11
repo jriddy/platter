@@ -19,7 +19,6 @@ import zipfile
 
 __version__ = '1.0'
 
-_VARS = {}
 _IS_PY2 = bool(sys.version_info[0] < 3)
 _PY_TAG = '{0[0]}{0[1]}'.format(sys.version_info)
 
@@ -44,13 +43,10 @@ def _retag_package(basename):
     return '-'.join([name, ver] + tags_parts) + '.whl'
 
 
-def pack():
+def pack(whl_fname, dst_dir):
     """
     Un-pack original whl, compile all to pyc, then make a new whl
     """
-    _args = _VARS['args']
-    whl_fname = _args.wheel[0]
-    dst_dir = _args.dst
     whl_tmp_dir = whl_bname = ntpath.basename(whl_fname).rsplit('.', 1)[0]
 
     print('creating {!r} ...'.format(whl_tmp_dir))
@@ -107,6 +103,11 @@ def pack():
         shutil.rmtree(whl_tmp_dir)
 
 
+def pack_all(wheel_files, dst_dir):
+    for w in wheel_files:
+        pack(w, dst_dir)
+
+
 def main():
     """
     Main function
@@ -117,11 +118,11 @@ def main():
     )
     parser.add_argument('--version', action='version',
                         version='%(prog)s {}'.format(__version__))
-    parser.add_argument('wheel', nargs=1, type=str, help='*.whl file name')
-    parser.add_argument('dst', nargs='?', type=str, default='dist',
+    parser.add_argument('--dst', nargs='?', type=str, default='dist',
                         help='New Wheel output directory (default: %(default)s)')
-    _VARS['args'] = parser.parse_args()
-    pack()
+    parser.add_argument('wheels', nargs='+', type=str, help='*.whl file name')
+    args = parser.parse_args()
+    pack_all(args.wheels, args.dst)
 
 
 if __name__ == '__main__':
