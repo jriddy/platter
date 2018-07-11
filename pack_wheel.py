@@ -87,6 +87,8 @@ def pack():
 
         new_whl_file_name = _retag_package(whl_bname)
         new_whl_file_path = os.path.join(dst_dir, new_whl_file_name)
+        if not os.path.isdir(dst_dir):
+            os.makedirs(dst_dir)
         if os.path.isfile(new_whl_file_path):
             print('deleting {!r} ...'.format(new_whl_file_path))
             os.remove(new_whl_file_path)
@@ -116,7 +118,7 @@ def main():
     parser.add_argument('--version', action='version',
                         version='%(prog)s {}'.format(__version__))
     parser.add_argument('wheel', nargs=1, type=str, help='*.whl file name')
-    parser.add_argument('dst', nargs='?', type=str, default='./',
+    parser.add_argument('dst', nargs='?', type=str, default='dist',
                         help='New Wheel output directory (default: %(default)s)')
     _VARS['args'] = parser.parse_args()
     pack()
