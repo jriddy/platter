@@ -14,6 +14,8 @@ import re
 import sysconfig
 import subprocess
 import pytoml as toml
+import glob
+import pack_wheel
 from contextlib import contextmanager
 
 
@@ -225,7 +227,7 @@ class Builder(object):
     def __init__(self, log, path, output, python=None,
                  virtualenv_version=None, wheel_version=None,
                  pip_options=None, no_download=None, wheel_cache=None,
-                 requirements=None, require_hashes=None):
+                 requirements=None, require_hashes=None, remove_sources=None):
         self.log = log
         self.path = os.path.abspath(path)
         self.output = output
@@ -241,6 +243,7 @@ class Builder(object):
             requirements = os.path.abspath(requirements)
         self.requirements = requirements
         self.require_hashes = require_hashes
+        self.remove_sources = remove_sources
         self.no_download = no_download
         self.pip_options = list(pip_options or ())
         self.scratchpads = []
@@ -345,6 +348,9 @@ class Builder(object):
             self.execute(os.path.join(venv_path, 'bin', 'pip'),
                          cmdline + [self.path])
 
+            if self.remove_sources:
+                self.pack_wheels(data_dir)
+
             if self.requirements is not None:
                 # execute requirements separately in case hashes are specified
                 # pip will fail to install local directories when hashes are
@@ -365,8 +371,11 @@ class Builder(object):
                         reqs_file.write(no_hash_reqs)
                         reqs_file.truncate()
 
-
-
+    def pack_wheels(self, data_dir):
+        wheels = glob.glob(os.path.join(data_dir, self.remove_sources))
+        if wheels:
+            self.log.info("packing wheels: {}", wheels)
+            pack_wheel.pack_all(wheels, data_dir)
 
     def setup_build_venv(self, virtualenv):
         scratchpad = self.make_scratchpad('venv')
@@ -713,6 +722,7 @@ def get_opts_from_pyproject(ctx, path):
               'install the project with --no-deps and assume all '
               'dependencies are provided by the requirements file with '
               'hashes.')
+@click.option('--remove-sources', help='glob of wheels to remove .py files from')
 @click.pass_context
 def build_cmd(ctx, **kwargs):
     """Builds a platter package.  The argument is the path to the package.
@@ -761,13 +771,14 @@ def build_cmd(ctx, **kwargs):
                  **{k: kwargs[k] for k in
                     ['python', 'virtualenv_version', 'wheel_version',
                      'no_download', 'wheel_cache', 'requirements',
-                     'require_hashes']}) as builder:
+                     'require_hashes', 'remove_sources']}) as builder:
         builder.build(kwargs['format'],
                       prebuild_script=kwargs['prebuild_script'],
                       postbuild_script=kwargs['postbuild_script'])
 
     if pipfile_requirements:
         os.remove(pipfile_requirements)
+
 
 @cli.command('clean-cache')
 @click.option('--wheel-cache', type=click.Path(),
