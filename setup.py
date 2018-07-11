@@ -10,7 +10,7 @@ setup(
     author_email='armin.ronacher@active-4.com',
     description='A deployment helper for Python.',
     long_description=__doc__,
-    py_modules=['platter'],
+    py_modules=['platter', 'pack_wheel'],
     platforms='any',
     install_requires=[
         'click>=2.0',
