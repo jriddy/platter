@@ -21,7 +21,27 @@ __version__ = '1.0'
 
 _VARS = {}
 _IS_PY2 = bool(sys.version_info[0] < 3)
-_PY_TAG = 'py{0[0]}{0[1]}'.format(sys.version_info)
+_PY_TAG = '{0[0]}{0[1]}'.format(sys.version_info)
+
+
+def _retag_package(basename):
+    """Retag the wheel with the python version created.
+
+    Args:
+        basename (str): basename of wheel file w/o extension
+    Returns:
+        (str) new filename
+
+    See https://www.python.org/dev/peps/pep-0427/#file-name-convention
+    """
+    # TODO: technically can have a "build tag" that messes this algorithm up
+    parts = basename.split('-', 2)
+    name, ver, tags = parts
+    tags_parts = tags.split('-', 2)
+    # There could be more tag prefixes than this
+    pytypetag = 'cp' if tags_parts[0].startswith('cp') else 'py'
+    tags_parts[0] = pytypetag + _PY_TAG
+    return '-'.join([name, ver] + tags_parts) + '.whl'
 
 
 def pack():
@@ -65,16 +85,7 @@ def pack():
                     print('deleting {!r} ...'.format(path))
                     os.remove(path)
 
-        whl_parts = whl_bname.split('-', 2)
-        whl_name = whl_parts[0]
-        whl_ver = whl_parts[1]
-        whl_tag = whl_parts[2]
-        whl_tag_parts = whl_tag.split('-', 2)
-        whl_tag_parts[0] = _PY_TAG
-        new_whl_tag = '-'.join(whl_tag_parts)
-
-        new_whl_file_name = '{}-{}-{}.whl'.format(
-            whl_name, whl_ver, new_whl_tag)
+        new_whl_file_name = _retag_package(whl_bname)
         new_whl_file_path = os.path.join(dst_dir, new_whl_file_name)
         if os.path.isfile(new_whl_file_path):
             print('deleting {!r} ...'.format(new_whl_file_path))
